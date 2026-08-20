@@ -1,0 +1,87 @@
+name: SafeBox CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: safebox
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+
+      - name: Compile
+        run: ./mvnw compile -q
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/safebox
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: testpassword
+          JWT_SECRET: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItY2ktcGlwZWxpbmU=
+          AES_SECRET: dGVzdC1hZXMtMjU2LWtleS1mb3ItY2ktcGlwZWxpbmUh
+
+      - name: Run tests
+        run: ./mvnw test -q
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/safebox
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: testpassword
+          JWT_SECRET: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItY2ktcGlwZWxpbmU=
+          AES_SECRET: dGVzdC1hZXMtMjU2LWtleS1mb3ItY2ktcGlwZWxpbmUh
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: SafeBox
+          path: .
+          format: HTML
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
