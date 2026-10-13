@@ -3,13 +3,20 @@ name: SafeBox CI
 on:
   workflow_dispatch:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/safebox
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      AES_SECRET: ${{ secrets.AES_SECRET }}
 
     services:
       postgres:
@@ -17,11 +24,11 @@ jobs:
         env:
           POSTGRES_DB: safebox
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: testpassword
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready"
+          --health-cmd="pg_isready -U postgres -d safebox"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -34,7 +41,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: '25'
-          distribution: 'temurin'
+          distribution: temurin
 
       - name: Cache Maven dependencies
         uses: actions/cache@v5
@@ -44,21 +51,9 @@ jobs:
 
       - name: Compile
         run: ./mvnw compile -q
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/safebox
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: testpassword
-          JWT_SECRET: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItY2ktcGlwZWxpbmU=
-          AES_SECRET: dGVzdC1hZXMtMjU2LWtleS1mb3ItY2ktcGlwZWxpbmUh
 
       - name: Run tests
         run: ./mvnw test -q
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/safebox
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: testpassword
-          JWT_SECRET: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItY2ktcGlwZWxpbmU=
-          AES_SECRET: dGVzdC1hZXMtMjU2LWtleS1mb3ItY2ktcGlwZWxpbmUh
 
   security-scan:
     runs-on: ubuntu-latest
@@ -76,6 +71,7 @@ jobs:
           format: HTML
 
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: dependency-check-report
